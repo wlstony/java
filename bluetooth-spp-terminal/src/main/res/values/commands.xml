@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="command_show_run">Show Run</string>
+    <string name="command_reset">Reset</string>
+    <string name="command_save">Save</string>
+    <string name="command_reboot">Reboot</string>
+    <string name="command_send_gps">Send GPS</string>
+    <string name="command_tag_show_run">show running-config</string>
+    <string name="command_tag_reset">reload default</string>
+    <string name="command_tag_save">copy running-config startup-config</string>
+    <string name="command_tag_reboot">reload cold</string>
+</resources>

@@ -1,0 +1,98 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <EditText
+            android:id="@+id/username"
+            android:layout_width="0dp"
+            android:layout_height="70dp"
+            android:hint="@string/user"
+            android:layout_weight="4"
+            android:inputType="text"
+            android:autofillHints="" />
+
+        <!-- 密码输入框 -->
+        <EditText
+            android:id="@+id/password"
+            android:layout_width="0dp"
+            android:layout_height="70dp"
+            android:layout_weight="4"
+            android:hint="@string/passwd"
+            android:inputType="textPassword"
+            android:autofillHints="" />
+
+        <Button
+            android:id="@+id/loginButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:onClick="sendLogin"
+            android:text="@string/login" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <Button
+            android:id="@+id/command_show_run"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:layout_margin="0dp"
+            android:layout_weight="1"
+            android:padding="8dp"
+            android:onClick="sendDefaultCommand"
+            android:text="@string/command_show_run"
+            android:tag="@string/command_tag_show_run"
+            />
+        <Button
+            android:id="@+id/command_reset"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:layout_margin="0dp"
+            android:layout_weight="1"
+            android:padding="8dp"
+            android:onClick="sendDefaultCommand"
+            android:tag="@string/command_tag_reset"
+            android:text="@string/command_reset" />
+        <Button
+            android:id="@+id/command_save"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:layout_margin="0dp"
+            android:layout_weight="1"
+            android:padding="8dp"
+            android:tag="@string/command_tag_save"
+            android:onClick="sendDefaultCommand"
+            android:text="@string/command_save" />
+        <Button
+            android:id="@+id/command_reboot"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:layout_margin="0dp"
+            android:layout_weight="2"
+            android:padding="8dp"
+            android:onClick="sendDefaultCommand"
+            android:tag="@string/command_tag_reboot"
+            android:text="@string/command_reboot" />
+        <Button
+            android:id="@+id/command_send_gps"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:layout_margin="0dp"
+            android:layout_weight="2"
+            android:padding="8dp"
+            android:onClick="sendGps"
+            android:text="@string/command_send_gps" />
+    </LinearLayout>
+
+
+</LinearLayout>
