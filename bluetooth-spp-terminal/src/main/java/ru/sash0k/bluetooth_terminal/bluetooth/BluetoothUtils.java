@@ -116,8 +116,8 @@ public class BluetoothUtils {
         ArrayList<ParcelUuid> result = new ArrayList<ParcelUuid>();
 
         try {
-            Method method = device.getClass().getMethod("getUuids", null);
-            ParcelUuid[] phoneUuids = (ParcelUuid[]) method.invoke(device, null);
+            Method method = device.getClass().getMethod("getUuids", (Class<?>[]) null);
+            ParcelUuid[] phoneUuids = (ParcelUuid[]) method.invoke(device, new Class<?>[0]);
             if (phoneUuids != null) {
                 for (ParcelUuid uuid : phoneUuids) {
                     if (D) Log.d(TAG, device.getName() + ": " + uuid.toString());
