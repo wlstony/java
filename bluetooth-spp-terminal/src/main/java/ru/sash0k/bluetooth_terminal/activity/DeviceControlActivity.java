@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.preference.PreferenceManager;
 import android.text.Html;
@@ -71,6 +72,9 @@ public final class DeviceControlActivity extends BaseActivity {
     private String command_ending;
     private String deviceName;
     private LocationHelper locationHelper;
+    private boolean isLoggingIn = false;
+    private Handler loginHandler = new Handler(Looper.getMainLooper());
+    private static final int LOGIN_TIMEOUT = 8000; // 8秒超时
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -132,7 +136,7 @@ public final class DeviceControlActivity extends BaseActivity {
             if ("text/plain".equals(type)) {
                 String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
                 if (sharedText != null) {
-                    EditText commandEditText = (EditText) findViewById(R.id.command_edittext);
+                    EditText commandEditText = findViewById(R.id.command_edittext);
                     commandEditText.setText(sharedText);
                 }
             }
@@ -373,11 +377,55 @@ public final class DeviceControlActivity extends BaseActivity {
             showAlertDialog("user and passwd can not be empty", false);
             return;
         }
-        sendStringCommand(username, false);
-        Thread.sleep(50);
-        sendStringCommand(passwd, false);
-    }
+        if (!isConnected()) {
+            showAlertDialog("Not connected to device", false);
+            return;
+        }
+//        sendStringCommand(username, false);
+//        Thread.sleep(50);
+//        sendStringCommand(passwd, false);
 
+        // 开始登录
+        startAutoLogin(username, passwd);
+    }
+    // ==================== 核心登录流程 ====================
+    private void startAutoLogin(final String username, final String password) {
+        isLoggingIn = true;
+        appendLog("[APP] Starting login...", false, true, false);
+
+        // 设置登录超时
+        loginHandler.postDelayed(() -> {
+            if (isLoggingIn) {
+                Toast.makeText(this, "Login timeout", Toast.LENGTH_SHORT).show();
+                isLoggingIn = false;
+            }
+        }, LOGIN_TIMEOUT);
+
+        // 第一步：发送用户名
+        loginHandler.postDelayed(() -> {
+            if (!isLoggingIn) return;
+
+            appendLog("Sending username: " + username, false, true, false);
+            sendStringCommand(username, false);
+
+            // 第二步：延迟发送密码
+            loginHandler.postDelayed(() -> {
+                if (!isLoggingIn) return;
+
+                appendLog("Sending password: ******", false, true, false);
+                sendStringCommand(password, false);
+
+                // 第三步：登录完成，等待验证
+                loginHandler.postDelayed(() -> {
+                    if (isLoggingIn) {
+                        appendLog("Login completed, waiting for response", false, false, false);
+                    }
+                }, 500);
+
+            }, 500); // 用户名和密码间隔500ms
+
+        }, 500); // 连接后延迟500ms开始
+    }
     public void sendGps(View view) throws InterruptedException {
         if (!checkLocationPermission() || !checkCoarsePermission()) {
             showAlertDialog("no location permission", false);
@@ -405,48 +453,6 @@ public final class DeviceControlActivity extends BaseActivity {
             Thread.sleep(50);
            sendStringCommand(s,false);
         }
-
-//        fusedLocationProviderClient.getCurrentLocation()
-//                .addOnSuccessListener(this, new OnSuccessListener<Location>() {
-//                    @Override
-//                    public void onSuccess(Location location) {
-//                        // Got last known location. In some rare situations this can be null.
-//                        if (location != null) {
-//                            double latitude = location.getLatitude();
-//                            double longitude = location.getLongitude();
-//                            // 在这里处理经纬度数据
-//                            String[] gpsCommand = {
-//                                    "configure terminal",
-//                                    "gps latitude north " + latitude,
-//                                    "gps longitude east " + longitude,
-//                                    "exit"
-//                            };
-//                            for (String s : gpsCommand) {
-//                                String commandString = s;
-//                                if (checkSum) {
-//                                    commandString += Utils.calcModulo256(commandString);
-//                                }
-//
-//                                byte[] command = (hexMode ? Utils.toHex(commandString) : commandString.getBytes());
-//                                if (command_ending != null) command = Utils.concat(command, command_ending.getBytes());
-//                                if (isConnected()) {
-//                                    connector.write(command);
-//                                    appendLog(commandString, hexMode, true, needClean);
-//                                } else {
-//                                    appendLog("not connected, send " + commandString, hexMode, true, needClean);
-//                                }
-//                            }
-//                        } else {
-//                            showAlertDialog("Location is null");
-//                        }
-//                    }
-//                })
-//                .addOnFailureListener(this, new OnFailureListener() {
-//                    @Override
-//                    public void onFailure(@NonNull Exception e) {
-//                        showAlertDialog("Get location failed, reason "+e.getMessage());
-//                    }
-//                });
     }
 
 
@@ -461,9 +467,6 @@ public final class DeviceControlActivity extends BaseActivity {
             final String arrow = (outgoing ? " << " : " >> ");
             msg.append(arrow);
         } else msg.append(" ");
-
-        message = message.replace("\r", "").replace("\n", "");
-
         String crc = "";
         boolean crcOk = false;
         if (checkSum) {
@@ -473,7 +476,9 @@ public final class DeviceControlActivity extends BaseActivity {
             crcOk = outgoing || crc.equals(Utils.calcModulo256(message).toUpperCase());
             if (hexMode) crc = Utils.printHex(crc.toUpperCase());
         }
-
+        if (!outgoing && isLoggingIn) {
+            checkLoginResponse(message);
+        }
         msg.append("<b>")
                 .append(hexMode ? Utils.printHex(message) : message)
                 .append(checkSum ? Utils.mark(crc, crcOk ? CRC_OK : CRC_BAD) : "")
@@ -489,7 +494,44 @@ public final class DeviceControlActivity extends BaseActivity {
         if (clean) commandEditText.setText("");
     }
     // =========================================================================
+    private void checkLoginResponse(String response) {
+        if (!isLoggingIn) return;
 
+        // 检查登录成功的关键词
+        if (response.contains("#") ||
+                response.contains(">") ||
+                response.contains("$") ||
+                response.contains("Welcome") ||
+                response.contains("Last login") ||
+                response.toLowerCase().contains("success")) {
+
+            // 登录成功
+            loginHandler.removeCallbacksAndMessages(null);
+            isLoggingIn = false;
+
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show();
+                appendLog("[APP] ✓ Login successful!", false, false, false);
+            });
+        }
+
+        // 检查登录失败的关键词
+        else if (response.contains("Error") ||
+                response.contains("Invalid") ||
+                response.contains("Access denied") ||
+                response.contains("Login incorrect") ||
+                response.toLowerCase().contains("fail")) {
+
+            // 登录失败
+            loginHandler.removeCallbacksAndMessages(null);
+            isLoggingIn = false;
+
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Login failed", Toast.LENGTH_SHORT).show();
+                appendLog("[APP] ✗ Login failed: " + response, false, false, false);
+            });
+        }
+    }
 
     void setDeviceName(String deviceName) {
         this.deviceName = deviceName;
