@@ -5,5 +5,5 @@ package ru.sash0k.bluetooth_terminal;
  * Общие константы
  */
 public class Const {
-    static final String TAG = "SPP_TERMINAL";
+    static final String TAG = "debug";
 }

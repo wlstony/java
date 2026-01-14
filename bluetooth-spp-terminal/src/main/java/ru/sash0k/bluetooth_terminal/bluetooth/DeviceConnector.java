@@ -30,12 +30,13 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 import ru.sash0k.bluetooth_terminal.DeviceData;
+import ru.sash0k.bluetooth_terminal.Utils;
 import ru.sash0k.bluetooth_terminal.activity.DeviceControlActivity;
 
 
 public class DeviceConnector {
-    private static final String TAG = "DeviceConnector";
-    private static final boolean D = false;
+    private static final String TAG = "debug";
+    private static final boolean D = true;
 
     // Constants that indicate the current connection state
     public static final int STATE_NONE = 0;       // we're doing nothing
@@ -171,7 +172,6 @@ public class DeviceConnector {
             if (mState != STATE_CONNECTED) return;
             r = mConnectedThread;
         }
-
         // Perform the write unsynchronized
         if (data.length == 1) r.write(data[0]);
         else r.writeData(data);
@@ -205,23 +205,23 @@ public class DeviceConnector {
 
     // ==========================================================================
     private class ConnectThread extends Thread {
-        private static final String TAG = "ConnectThread";
+        private static final String TAG = "debug";
         private static final boolean D = true;
 
         private final BluetoothSocket mmSocket;
         private final BluetoothDevice mmDevice;
 
         public ConnectThread(BluetoothDevice device) {
-            if (D) Log.d(TAG, "create ConnectThread");
+            Utils.log("create ConnectThread");
             mmDevice = device;
             mmSocket = BluetoothUtils.createRfcommSocket(mmDevice);
         }
         // ==========================================================================
 
         public void run() {
-            if (D) Log.d(TAG, "ConnectThread run");
+            Utils.log("ConnectThread run");
             if (mmSocket == null) {
-                if (D) Log.d(TAG, "unable to connect to device, socket isn't created");
+                Utils.log("unable to connect to device, socket isn't created");
                 connectionFailed();
                 return;
             }
@@ -236,7 +236,7 @@ public class DeviceConnector {
                 try {
                     mmSocket.close();
                 } catch (IOException e2) {
-                    if (D) Log.e(TAG, "unable to close() socket during connection failure", e2);
+                    Utils.loge("unable to close() socket during connection failure", e2);
                 }
                 connectionFailed();
                 return;
@@ -276,15 +276,12 @@ public class DeviceConnector {
 
     // ==========================================================================
     private class ConnectedThread extends Thread {
-        private static final String TAG = "ConnectedThread";
+        private static final String TAG = "debug";
         private static final boolean D = true;
 
         private final BluetoothSocket mmSocket;
         private final InputStream mmInStream;
         private final OutputStream mmOutStream;
-
-        // 存储最近发送的命令
-        private final List<String> sentCommands = new ArrayList<>();
 
         public ConnectedThread(BluetoothSocket socket) {
             if (D) Log.d(TAG, "create ConnectedThread");
@@ -309,7 +306,8 @@ public class DeviceConnector {
             Log.i(TAG, "ConnectedThread run");
             byte[] buffer = new byte[1024];
             int bytes;
-            StringBuilder ciscoOutput = new StringBuilder();
+            clearInitialData();
+
 
             while (true) {
                 try {
@@ -320,7 +318,11 @@ public class DeviceConnector {
                     }
 
                     String rawData = new String(buffer, 0, bytes, "UTF-8");
-
+                    // 过滤掉可能残留的AT命令响应
+                    if (isBluetoothModuleData(rawData)) {
+                        Log.d(TAG, "Filtered BT module data: " + rawData);
+                        continue;
+                    }
                     // 处理思科设备输出
                     processCiscoOutput(rawData);
 
@@ -330,6 +332,53 @@ public class DeviceConnector {
                     break;
                 }
             }
+        }
+
+        /**
+         * 清理初始数据
+         */
+        private void clearInitialData() {
+            try {
+                Log.d(TAG, "Clearing initial data...");
+
+                // 等待2秒，让设备输出完成
+                Thread.sleep(2000);
+
+                // 清空缓冲区
+                byte[] clearBuf = new byte[1024];
+                int total = 0;
+                while (mmInStream.available() > 0) {
+                    int bytes = mmInStream.read(clearBuf);
+                    total += bytes;
+                    String cleared = new String(clearBuf, 0, bytes, "UTF-8");
+                    Log.w(TAG, "Cleared: " + cleared);
+                }
+
+                Log.i(TAG, "Cleared " + total + " bytes of initial data");
+
+            } catch (Exception e) {
+                Log.e(TAG, "Clear error", e);
+            }
+        }
+
+        /**
+         * 判断是否需要过滤输出
+         */
+        private boolean isBluetoothModuleData(String data) {
+            if (data == null || data.isEmpty()) return false;
+
+            String upperData = data.toUpperCase().trim();
+
+            // 蓝牙模块常见响应模式
+            return upperData.startsWith("AT") ||
+                    upperData.startsWith("+") ||
+                    upperData.contains("OK") ||
+                    upperData.contains("ERROR") ||
+                    upperData.contains("READY") ||
+                    upperData.contains("VERSION") ||
+                    upperData.matches(".*[0-9A-F]{12}.*") || // 蓝牙地址
+                    upperData.matches("^\\d{4}/\\d{2}/\\d{2}.*") || // 日期
+                    upperData.matches("^BAUD:\\d+.*"); // 波特率
         }
 
         /**

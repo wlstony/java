@@ -21,6 +21,12 @@ public class Utils {
             if (message != null) Log.i(Const.TAG, message);
         }
     }
+    public static void loge(String message,Throwable tr) {
+        if (BuildConfig.DEBUG) {
+            if (message != null) Log.e(Const.TAG, message,tr);
+        }
+    }
+
     // ============================================================================
 
 

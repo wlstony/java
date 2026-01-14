@@ -360,6 +360,7 @@ public final class DeviceControlActivity extends BaseActivity {
             commandString += Utils.calcModulo256(commandString);
         }
         String strWithColor = "<font color='green'>"+commandString+"</font>";
+Log.d("debug", "command:"+commandString);
 
         byte[] command = (hexMode ? Utils.toHex(commandString) : commandString.getBytes());
         if (command_ending != null) command = Utils.concat(command, command_ending.getBytes());
@@ -557,7 +558,6 @@ public final class DeviceControlActivity extends BaseActivity {
             if (activity != null) {
                 switch (msg.what) {
                     case MESSAGE_STATE_CHANGE:
-
                         Utils.log("MESSAGE_STATE_CHANGE: " + msg.arg1);
                         final ActionBar bar = activity.getActionBar();
                         switch (msg.arg1) {
