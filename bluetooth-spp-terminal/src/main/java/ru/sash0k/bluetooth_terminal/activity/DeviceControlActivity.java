@@ -273,10 +273,8 @@ public final class DeviceControlActivity extends BaseActivity {
         final String checkSum = Utils.getPrefence(this, getString(R.string.pref_checksum_mode));
         this.checkSum = "Modulo 256".equals(checkSum);
 
-        // Окончание строки
         this.command_ending = getCommandEnding();
 
-        // Формат отображения лога команд
         this.show_timings = Utils.getBooleanPrefence(this, getString(R.string.pref_log_timing));
         this.show_direction = Utils.getBooleanPrefence(this, getString(R.string.pref_log_direction));
         this.needClean = Utils.getBooleanPrefence(this, getString(R.string.pref_need_clean));
@@ -284,11 +282,6 @@ public final class DeviceControlActivity extends BaseActivity {
         this.logLimitSize = Utils.formatNumber(Utils.getPrefence(this, getString(R.string.pref_log_limit_size)));
     }
     // ============================================================================
-
-
-    /**
-     * Получить из настроек признак окончания команды
-     */
     private String getCommandEnding() {
         String result = Utils.getPrefence(this, getString(R.string.pref_commands_ending));
         if (result.equals("\\r\\n")) result = "\r\n";
@@ -322,11 +315,6 @@ public final class DeviceControlActivity extends BaseActivity {
         }
     }
     // ==========================================================================
-
-
-    /**
-     * Установка соединения с устройством
-     */
     private void setupConnector(BluetoothDevice connectedDevice) {
         stopConnection();
         try {
@@ -360,8 +348,7 @@ public final class DeviceControlActivity extends BaseActivity {
             commandString += Utils.calcModulo256(commandString);
         }
         String strWithColor = "<font color='green'>"+commandString+"</font>";
-Log.d("debug", "command:"+commandString);
-
+        Utils.log("sendStringCommand:" + commandString);
         byte[] command = (hexMode ? Utils.toHex(commandString) : commandString.getBytes());
         if (command_ending != null) command = Utils.concat(command, command_ending.getBytes());
         if (isConnected()) {
