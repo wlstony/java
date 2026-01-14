@@ -576,6 +576,8 @@ Log.d("debug", "command:"+commandString);
 
                     case MESSAGE_READ:
                         final String readMessage = (String) msg.obj;
+                        Utils.log("MESSAGE Read: " +readMessage);
+
                         if (readMessage != null) {
                             activity.appendLog(readMessage, false, false, false);
                         }

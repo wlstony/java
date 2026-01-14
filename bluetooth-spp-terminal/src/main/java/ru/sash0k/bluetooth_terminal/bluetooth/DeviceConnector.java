@@ -68,18 +68,17 @@ public class DeviceConnector {
      * Запрос на соединение с устойством
      */
     public synchronized void connect() {
-        if (D) Log.d(TAG, "connect to: " + connectedDevice);
-
+        Utils.log("connect to: " + connectedDevice);
         if (mState == STATE_CONNECTING) {
             if (mConnectThread != null) {
-                if (D) Log.d(TAG, "cancel mConnectThread");
+                Utils.log("cancel mConnectThread");
                 mConnectThread.cancel();
                 mConnectThread = null;
             }
         }
 
         if (mConnectedThread != null) {
-            if (D) Log.d(TAG, "cancel mConnectedThread");
+            Utils.log("cancel mConnectedThread");
             mConnectedThread.cancel();
             mConnectedThread = null;
         }
@@ -95,16 +94,15 @@ public class DeviceConnector {
      * Завершение соединения
      */
     public synchronized void stop() {
-        if (D) Log.d(TAG, "stop");
-
+        Utils.log("stop");
         if (mConnectThread != null) {
-            if (D) Log.d(TAG, "cancel mConnectThread");
+            Utils.log("cancel mConnectThread");
             mConnectThread.cancel();
             mConnectThread = null;
         }
 
         if (mConnectedThread != null) {
-            if (D) Log.d(TAG, "cancel mConnectedThread");
+            Utils.log("cancel mConnectedThread");
             mConnectedThread.cancel();
             mConnectedThread = null;
         }
@@ -137,17 +135,17 @@ public class DeviceConnector {
 
 
     public synchronized void connected(BluetoothSocket socket) {
-        if (D) Log.d(TAG, "connected");
+        Utils.log("connected");
 
         // Cancel the thread that completed the connection
         if (mConnectThread != null) {
-            if (D) Log.d(TAG, "cancel mConnectThread");
+            Utils.log("cancel mConnectThread");
             mConnectThread.cancel();
             mConnectThread = null;
         }
 
         if (mConnectedThread != null) {
-            if (D) Log.d(TAG, "cancel mConnectedThread");
+            Utils.log("cancel mConnectedThread");
             mConnectedThread.cancel();
             mConnectedThread = null;
         }
@@ -284,7 +282,7 @@ public class DeviceConnector {
         private final OutputStream mmOutStream;
 
         public ConnectedThread(BluetoothSocket socket) {
-            if (D) Log.d(TAG, "create ConnectedThread");
+            Utils.log("create ConnectedThread");
 
             mmSocket = socket;
             InputStream tmpIn = null;
@@ -295,7 +293,7 @@ public class DeviceConnector {
                 tmpIn = socket.getInputStream();
                 tmpOut = socket.getOutputStream();
             } catch (IOException e) {
-                if (D) Log.e(TAG, "temp sockets not created", e);
+                Utils.loge("temp sockets not created", e);
             }
 
             mmInStream = tmpIn;
@@ -303,12 +301,9 @@ public class DeviceConnector {
         }
         // ==========================================================================
         public void run() {
-            Log.i(TAG, "ConnectedThread run");
+            Utils.log("ConnectedThread run");
             byte[] buffer = new byte[1024];
             int bytes;
-            clearInitialData();
-
-
             while (true) {
                 try {
                     bytes = mmInStream.read(buffer);
@@ -316,59 +311,28 @@ public class DeviceConnector {
                         if (bytes == -1) break;
                         continue;
                     }
-
                     String rawData = new String(buffer, 0, bytes, "UTF-8");
                     // 过滤掉可能残留的AT命令响应
                     if (isBluetoothModuleData(rawData)) {
-                        Log.d(TAG, "Filtered BT module data: " + rawData);
+                        Utils.log("Filtered BT module data: " + rawData);
                         continue;
                     }
                     // 处理思科设备输出
                     processCiscoOutput(rawData);
 
                 } catch (IOException e) {
-                    Log.e(TAG, "disconnected", e);
+                    Utils.loge("disconnected", e);
                     connectionLost();
                     break;
                 }
             }
         }
-
-        /**
-         * 清理初始数据
-         */
-        private void clearInitialData() {
-            try {
-                Log.d(TAG, "Clearing initial data...");
-
-                // 等待2秒，让设备输出完成
-                Thread.sleep(2000);
-
-                // 清空缓冲区
-                byte[] clearBuf = new byte[1024];
-                int total = 0;
-                while (mmInStream.available() > 0) {
-                    int bytes = mmInStream.read(clearBuf);
-                    total += bytes;
-                    String cleared = new String(clearBuf, 0, bytes, "UTF-8");
-                    Log.w(TAG, "Cleared: " + cleared);
-                }
-
-                Log.i(TAG, "Cleared " + total + " bytes of initial data");
-
-            } catch (Exception e) {
-                Log.e(TAG, "Clear error", e);
-            }
-        }
-
         /**
          * 判断是否需要过滤输出
          */
         private boolean isBluetoothModuleData(String data) {
             if (data == null || data.isEmpty()) return false;
-
             String upperData = data.toUpperCase().trim();
-
             // 蓝牙模块常见响应模式
             return upperData.startsWith("AT") ||
                     upperData.startsWith("+") ||
@@ -392,14 +356,7 @@ public class DeviceConnector {
 
             for (String line : lines) {
                 String trimmedLine = line.trim();
-
                 if (trimmedLine.isEmpty()) continue;
-
-                // 过滤思科命令回显
-                if (isCiscoCommandEcho(trimmedLine)) {
-                    Log.d(TAG, "Filtered Cisco echo: " + trimmedLine);
-                    continue;
-                }
 
                 // 发送到UI
                 mHandler.obtainMessage(DeviceControlActivity.MESSAGE_READ,
@@ -408,100 +365,6 @@ public class DeviceConnector {
         }
 
 
-        /**
-         * 判断是否是思科命令回显
-         */
-        private boolean isCiscoCommandEcho(String line) {
-            if (line == null || line.isEmpty()) return false;
-
-            // 转换为小写便于比较
-            String lowerLine = line.toLowerCase();
-
-            // 思科常见命令（最全面的列表）
-            String[] ciscoCommands = {
-                    // 显示命令
-                    "show ", "sh ", "display ", "disp ",
-
-                    // 配置命令
-                    "configure ", "conf ", "config ",
-
-                    // 模式切换
-                    "enable", "en", "disable", "dis",
-
-                    // 退出命令
-                    "exit", "end",
-
-                    // 文件操作
-                    "copy ", "write ", "wr ", "erase ", "delete ", "del ",
-
-                    // 网络测试
-                    "ping ", "traceroute ", "trace ", "telnet ", "ssh ",
-
-                    // 接口配置
-                    "interface ", "int ", "vlan ", "port-channel ",
-
-                    // IP配置
-                    "ip ", "ipv6 ", "ip route ", "ip address ",
-
-                    // 路由协议
-                    "router ", "route ", "ospf ", "eigrp ", "bgp ", "rip ",
-
-                    // 访问控制
-                    "access-list ", "acl ", "ip access-list ",
-
-                    // 用户管理
-                    "username ", "password ", "enable secret ", "enable password ",
-
-                    // 线路配置
-                    "line ", "console ", "vty ", "aux ",
-
-                    // 服务管理
-                    "service ", "no ", "hostname ", "description ",
-
-                    // 物理接口
-                    "speed ", "duplex ", "shutdown ", "no shutdown ",
-
-                    // 其他常用
-                    "clock ", "ntp ", "logging ", "snmp ", "cdp ", "lldp ",
-
-                    // 您的特定命令
-                    "gps ", "configure terminal", "show inter * only"
-            };
-
-            // 检查是否是思科命令
-            for (String cmd : ciscoCommands) {
-                if (lowerLine.startsWith(cmd)) {
-                    return true;
-                }
-            }
-
-            // 检查是否是最近发送的命令（修复：先检查lastCommand是否为null）
-            if (lastCommand != null) {
-                if (line.equals(lastCommand) ||
-                        line.startsWith(lastCommand) ||
-                         lastCommand.startsWith(line)) {
-                    return true;
-                }
-            }
-            // 检查思科提示符
-            return isCiscoPrompt(line);
-        }
-
-        /**
-         * 判断是否是思科提示符
-         */
-        private boolean isCiscoPrompt(String line) {
-            // 思科提示符格式:
-            // Router>        用户模式
-            // Router#        特权模式
-            // Router(config)# 配置模式
-            // Router(config-if)# 接口模式
-            // Router(config-line)# 线路模式
-
-            return line.matches("^[A-Za-z0-9_-]+[#>]$") ||
-                    line.matches("^[A-Za-z0-9_-]+\\(config[-\\)]*\\)#$") ||
-                    line.equals("#") || line.equals(">");
-        }
 
         /**
          * 记录最后发送的命令
