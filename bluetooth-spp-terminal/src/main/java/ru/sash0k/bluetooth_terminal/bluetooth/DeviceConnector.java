@@ -29,6 +29,8 @@ import android.os.Message;
 import android.util.Log;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+
 import ru.sash0k.bluetooth_terminal.DeviceData;
 import ru.sash0k.bluetooth_terminal.Utils;
 import ru.sash0k.bluetooth_terminal.activity.DeviceControlActivity;
@@ -299,103 +301,72 @@ public class DeviceConnector {
             mmInStream = tmpIn;
             mmOutStream = tmpOut;
         }
-        // ==========================================================================
+
         public void run() {
             Utils.log("ConnectedThread run");
             byte[] buffer = new byte[1024];
             int bytes;
+            StringBuilder line = new StringBuilder();
+
             while (true) {
                 try {
                     bytes = mmInStream.read(buffer);
-                    if (bytes <= 0) {
-                        if (bytes == -1) break;
-                        continue;
-                    }
-                    String rawData = new String(buffer, 0, bytes, "UTF-8");
-                    // 过滤掉可能残留的AT命令响应
-                    if (isBluetoothModuleData(rawData)) {
-                        Utils.log("Filtered BT module data: " + rawData);
-                        continue;
-                    }
-                    // 处理思科设备输出
-                    processCiscoOutput(rawData);
 
+                    if (bytes > 0) {
+                        for (int i = 0; i < bytes; i++) {
+                            byte b = buffer[i];
+
+                            if (b == '\n') {
+                                // 处理完整行
+                                String completeLine = line.toString().trim();
+                                if (!completeLine.isEmpty()) {
+                                    // 过滤控制字符和ANSI转义序列
+                                    String cleanMessage = filterControlChars(completeLine);
+                                    if (!cleanMessage.isEmpty()) {
+                                        mHandler.obtainMessage(DeviceControlActivity.MESSAGE_READ,
+                                                -1, -1, cleanMessage).sendToTarget();
+                                    }
+                                }
+                                line.setLength(0);
+                            }
+                            else if (b >= 32 && b < 127) {
+                                // 可打印字符
+                                line.append((char) b);
+                            }
+                            // 其他控制字符被忽略
+                        }
+                    } else if (bytes == -1) {
+                        break;
+                    }
                 } catch (IOException e) {
-                    Utils.loge("disconnected", e);
                     connectionLost();
                     break;
                 }
             }
         }
-        /**
-         * 判断是否需要过滤输出
-         */
-        private boolean isBluetoothModuleData(String data) {
-            if (data == null || data.isEmpty()) return false;
-            String upperData = data.toUpperCase().trim();
-            // 蓝牙模块常见响应模式
-            return upperData.startsWith("AT") ||
-                    upperData.startsWith("+") ||
-                    upperData.contains("OK") ||
-                    upperData.contains("ERROR") ||
-                    upperData.contains("READY") ||
-                    upperData.contains("VERSION") ||
-                    upperData.matches(".*[0-9A-F]{12}.*") || // 蓝牙地址
-                    upperData.matches("^\\d{4}/\\d{2}/\\d{2}.*") || // 日期
-                    upperData.matches("^BAUD:\\d+.*"); // 波特率
+
+        private String filterControlChars(String input) {
+            if (input == null || input.isEmpty()) return "";
+
+            // 方法1：使用正则表达式过滤ANSI转义序列和控制字符
+            String filtered = input
+                    // 移除ANSI转义序列（ESC [ ...）
+                    .replaceAll("\\x1B\\[[\\x30-\\x3F]*[\\x20-\\x2F]*[\\x40-\\x7E]", "")
+                    // 移除其他控制字符（包括^C）
+                    .replaceAll("[\\x00-\\x1F\\x7F]", "")
+                    // 移除残留的[字符（ANSI序列残留）
+                    .replaceAll("\\[[A-Za-z]", "")
+                    // 合并多个空格
+                    .replaceAll("\\s+", " ")
+                    .trim();
+
+            return filtered;
         }
-
-        /**
-         * 处理思科设备输出
-         */
-        private void processCiscoOutput(String data) {
-            if (data == null || data.isEmpty()) return;
-
-            // 按行分割
-            String[] lines = data.split("\n");
-
-            for (String line : lines) {
-                String trimmedLine = line.trim();
-                if (trimmedLine.isEmpty()) continue;
-
-                // 发送到UI
-                mHandler.obtainMessage(DeviceControlActivity.MESSAGE_READ,
-                        -1, -1, trimmedLine).sendToTarget();
-            }
-        }
-
 
 
         /**
          * 记录最后发送的命令
          */
-
-        /**
-         * 清理思科命令字符串
-         */
-        private String cleanCiscoCommand(String command) {
-            if (command == null) return "";
-
-            // 去除空白字符
-            command = command.trim();
-
-            // 去除回车换行符
-            command = command.replace("\r", "").replace("\n", "");
-
-            // 如果是配置终端命令，标准化
-            if (command.equals("conf t") || command.equals("config t")) {
-                command = "configure terminal";
-            }
-
-            // 如果是显示接口命令，标准化
-            if (command.startsWith("sh int") || command.startsWith("sh interface")) {
-                command = "show interface";
-            }
-
-            return command;
-        }
-
-
         private String lastCommand;
         public void writeData(byte[] chunk) {
             try {
@@ -403,18 +374,9 @@ public class DeviceConnector {
                 String command = new String(chunk, "UTF-8");  // 使用UTF-8编码
                 // 如果需要去除空白字符
                 command = command.trim();
-
-                // 清理命令字符串
-                command = cleanCiscoCommand(command);
-                lastCommand = command;
-
                 // 或者去除回车换行符
                 command = command.replace("\r", "").replace("\n", "").trim();
-
-                // 记录命令
                 lastCommand = command;
-
-
                 mmOutStream.write(chunk);
                 mmOutStream.flush();
                 // Share the sent message back to the UI Activity
