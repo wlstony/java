@@ -16,7 +16,6 @@ import android.text.Html;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.method.ScrollingMovementMethod;
-import android.util.Log;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -25,13 +24,6 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import androidx.annotation.NonNull;
-
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 
 
 import java.lang.ref.WeakReference;
@@ -358,6 +350,11 @@ public final class DeviceControlActivity extends BaseActivity {
             appendLog(strWithColor, hexMode, true, needClean);
         }
     }
+    // 添加状态判断
+    // 判断是否已经登录
+    public static boolean AlreadyLogged = false;
+    // 是否需要唤醒
+    public static boolean AlreadyWakedUp = false;
     public void sendLogin(View view) throws InterruptedException {
         String username = ((EditText)findViewById(R.id.username)).getText().toString();
         String passwd = ((EditText)findViewById(R.id.password)).getText().toString();
@@ -365,13 +362,14 @@ public final class DeviceControlActivity extends BaseActivity {
             showAlertDialog("user and passwd can not be empty", false);
             return;
         }
-        if (isConnected()) {
-            showAlertDialog("connection is already established", false);
+        if (!isConnected()) {
+            showAlertDialog("connection is not established", false);
             return;
         }
-//        sendStringCommand(username, false);
-//        Thread.sleep(50);
-//        sendStringCommand(passwd, false);
+        if (AlreadyLogged) {
+            showAlertDialog("already logged", false);
+            return;
+        }
 
         // 开始登录
         startAutoLogin(username, passwd);
@@ -389,31 +387,52 @@ public final class DeviceControlActivity extends BaseActivity {
             }
         }, LOGIN_TIMEOUT);
 
-        // 第一步：发送用户名
+        // 第一步：先发送回车唤醒设备
         loginHandler.postDelayed(() -> {
             if (!isLoggingIn) return;
+            if (!AlreadyWakedUp) {
+                appendLog("Sending ENTER to wake up device", false, true, false);
+                sendStringCommand("\n", false);  // 发送回车
+            }
 
-            appendLog("Sending username: " + username, false, true, false);
-            sendStringCommand(username, false);
 
-            // 第二步：延迟发送密码
+            // 第二步：延迟发送用户名
             loginHandler.postDelayed(() -> {
                 if (!isLoggingIn) return;
 
-                appendLog("Sending password: ******", false, true, false);
-                sendStringCommand(password, false);
+                appendLog("Sending username: " + username, false, true, false);
+                sendStringCommand(username, false);
 
-                // 第三步：登录完成，等待验证
+                // 第三步：延迟发送密码
                 loginHandler.postDelayed(() -> {
-                    if (isLoggingIn) {
-                        appendLog("Login completed, waiting for response", false, false, false);
-                    }
-                }, 500);
+                    if (!isLoggingIn) return;
 
-            }, 500); // 用户名和密码间隔500ms
+                    appendLog("Sending password: ******", false, true, false);
+                    sendStringCommand(password, false);
+
+                    // 第四步：发送回车确认登录
+                    loginHandler.postDelayed(() -> {
+                        if (!isLoggingIn) return;
+
+                        appendLog("Sending ENTER to confirm login", false, true, false);
+                        sendStringCommand("\n", false);
+
+                        // 第五步：登录完成，等待验证
+                        loginHandler.postDelayed(() -> {
+                            if (isLoggingIn) {
+                                appendLog("Login completed, waiting for response", false, false, false);
+                            }
+                        }, 500);
+
+                    }, 500); // 密码输入后500ms发送确认回车
+
+                }, 500); // 用户名和密码间隔500ms
+
+            }, 500); // 回车后500ms发送用户名
 
         }, 500); // 连接后延迟500ms开始
     }
+
     public void sendGps(View view) throws InterruptedException {
         if (!checkLocationPermission() || !checkCoarsePermission()) {
             showAlertDialog("no location permission", false);

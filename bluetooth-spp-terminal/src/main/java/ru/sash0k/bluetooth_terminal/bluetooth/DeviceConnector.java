@@ -27,9 +27,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+
 import java.util.regex.Pattern;
 
 import ru.sash0k.bluetooth_terminal.DeviceData;
@@ -361,6 +359,9 @@ public class DeviceConnector {
             if (line.contains("CONNECTING") || line.contains("CONNECTED")) {
                 // 可以进一步清理，只保留状态信息
                 return line;
+            }
+            if (line.equals("#") || line.equals("# CONNECTED")) {
+                DeviceControlActivity.AlreadyLogged = true;
             }
 
             // 如果不是连接状态信息，返回空字符串
