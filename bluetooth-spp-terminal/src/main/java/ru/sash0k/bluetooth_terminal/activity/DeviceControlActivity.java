@@ -372,64 +372,67 @@ public final class DeviceControlActivity extends BaseActivity {
         }
 
         // 开始登录
-        startAutoLogin(username, passwd);
+        startSmartLogin(username, passwd);
     }
     // ==================== 核心登录流程 ====================
-    private void startAutoLogin(final String username, final String password) {
+    /**
+     * 智能登录 - 根据设备响应交互
+     */
+    private void startSmartLogin(String username, String password) {
+        loginUsername = username;
+        loginPassword = password;
         isLoggingIn = true;
-        appendLog("[APP] Starting login...", false, true, false);
+        loginState = LoginState.IDLE;
+        if (AlreadyWakedUp) {
+            loginState = LoginState.SENT_ENTER;
+        }
 
-        // 设置登录超时
+        appendLog("[APP] 开始智能登录...", false, true, false);
+        // 设置超时
         loginHandler.postDelayed(() -> {
-            if (isLoggingIn) {
-                Toast.makeText(this, "Login timeout", Toast.LENGTH_SHORT).show();
+            if (isLoggingIn && loginState != LoginState.SUCCESS) {
+                loginState = LoginState.TIMEOUT;
                 isLoggingIn = false;
+                appendLog("[APP] 登录超时", false, true, false);
+                Toast.makeText(this, "登录超时", Toast.LENGTH_SHORT).show();
             }
         }, LOGIN_TIMEOUT);
 
-        // 第一步：先发送回车唤醒设备
-        loginHandler.postDelayed(() -> {
-            if (!isLoggingIn) return;
-            if (!AlreadyWakedUp) {
-                appendLog("Sending ENTER to wake up device", false, true, false);
-                sendStringCommand("\n", false);  // 发送回车
-            }
-            // 第二步：延迟发送用户名
-            loginHandler.postDelayed(() -> {
-                if (!isLoggingIn) return;
-
-                appendLog("Sending username: " + username, false, true, false);
-                sendStringCommand(username, false);
-
-                // 第三步：延迟发送密码
-                loginHandler.postDelayed(() -> {
-                    if (!isLoggingIn) return;
-
-                    appendLog("Sending password: ******", false, true, false);
-                    sendStringCommand(password, false);
-
-                    // 第四步：发送回车确认登录
-                    loginHandler.postDelayed(() -> {
-                        if (!isLoggingIn) return;
-                        appendLog("Sending ENTER to confirm login", false, true, false);
-                        sendStringCommand("\n", false);
-
-                        // 第五步：登录完成，等待验证
-                        loginHandler.postDelayed(() -> {
-                            if (isLoggingIn) {
-                                appendLog("Login completed, waiting for response", false, false, false);
-                            }
-                        }, 500);
-
-                    }, 500); // 密码输入后500ms发送确认回车
-
-                }, 500); // 用户名和密码间隔500ms
-
-            }, 500); // 回车后500ms发送用户名
-
-        }, 500); // 连接后延迟500ms开始
+        // 第一步：发送回车
+        sendLoginStep();
     }
 
+    /**
+     * 发送登录步骤
+     */
+    private void sendLoginStep() {
+        if (!isLoggingIn) return;
+        switch (loginState) {
+            case IDLE:
+                loginState = LoginState.SENT_ENTER;
+                Utils.log("步骤1: 发送回车唤醒设备");
+                sendStringCommand("\n", false);
+                break;
+
+            case SENT_USERNAME:
+                loginState = LoginState.WAITING_PASSWORD;
+                // 等待密码提示，不主动发送
+                Utils.log("等待密码提示...");
+                break;
+
+            case SENT_PASSWORD:
+                loginState = LoginState.WAITING_RESULT;
+                Utils.log("等待登录结果...");
+                break;
+            case SENT_ENTER:
+                // 如果登录时，直接让输入用户名
+                if (!AlreadyWakedUp) {
+                    break;
+                }
+                loginState = LoginState.WAITING_USERNAME;
+                sendUsername();
+        }
+    }
     public void sendGps(View view) throws InterruptedException {
         if (!checkLocationPermission() || !checkCoarsePermission()) {
             showAlertDialog("no location permission", false);
@@ -481,7 +484,7 @@ public final class DeviceControlActivity extends BaseActivity {
             if (hexMode) crc = Utils.printHex(crc.toUpperCase());
         }
         if (!outgoing && isLoggingIn) {
-            checkLoginResponse(message);
+            processDeviceResponse(message);
         }
         msg.append("<b>")
                 .append(hexMode ? Utils.printHex(message) : message)
@@ -498,43 +501,196 @@ public final class DeviceControlActivity extends BaseActivity {
         if (clean) commandEditText.setText("");
     }
     // =========================================================================
-    private void checkLoginResponse(String response) {
+    /**
+     * 处理设备响应 - 状态机驱动
+     */
+
+    // 登录状态
+    private enum LoginState {
+        IDLE,              // 空闲
+        SENT_ENTER,        // 已发送回车
+        WAITING_USERNAME,  // 等待用户名提示
+        SENT_USERNAME,     // 已发送用户名
+        WAITING_PASSWORD,  // 等待密码提示
+        SENT_PASSWORD,     // 已发送密码
+        WAITING_RESULT,    // 等待登录结果
+        SUCCESS,           // 登录成功
+        FAILED,            // 登录失败
+        TIMEOUT            // 超时
+    }
+
+    private LoginState loginState = LoginState.IDLE;
+    private String loginUsername = "";
+    private String loginPassword = "";
+    private void processDeviceResponse(String message) {
+        Utils.log(message);
         if (!isLoggingIn) return;
+        String msg = message.toLowerCase().trim();
 
-        // 检查登录成功的关键词
-        if (response.contains("#") ||
-                response.contains(">") ||
-                response.contains("$") ||
-                response.contains("Welcome") ||
-                response.contains("Last login") ||
-                response.toLowerCase().contains("success")) {
+        switch (loginState) {
+            case SENT_ENTER:
+                // 检查是否需要用户名
+                if (containsUsernamePrompt(msg)) {
+                    loginState = LoginState.WAITING_USERNAME;
+                    sendUsername();
+                }
+                // 检查是否已经有提示符（可能不需要登录）
+                else if (hasCommandPrompt(msg)) {
+                    handleLoginSuccess("已登录");
+                }
+                break;
 
-            // 登录成功
-            loginHandler.removeCallbacksAndMessages(null);
-            isLoggingIn = false;
+            case WAITING_USERNAME:
+                if (containsUsernamePrompt(msg)) {
+                    sendUsername();
+                }
+                break;
 
-            runOnUiThread(() -> {
-                Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show();
-                appendLog("[APP] ✓ Login successful!", false, false, false);
-            });
+            case SENT_USERNAME:
+                // 检查是否需要密码
+                if (containsPasswordPrompt(msg)) {
+                    loginState = LoginState.WAITING_PASSWORD;
+                    sendPassword();
+                }
+                // 检查是否登录成功（某些设备发送用户名后直接登录）
+                else if (hasCommandPrompt(msg)) {
+                    handleLoginSuccess("用户名验证通过");
+                }
+                break;
+
+            case WAITING_PASSWORD:
+                if (containsPasswordPrompt(msg)) {
+                    sendPassword();
+                }
+                break;
+
+            case SENT_PASSWORD:
+                // 检查登录结果
+                if (hasCommandPrompt(msg)) {
+                    handleLoginSuccess("密码验证通过");
+                } else if (isLoginFailure(msg)) {
+                    handleLoginFailure(message);
+                }
+                break;
+
+            case WAITING_RESULT:
+                if (hasCommandPrompt(msg)) {
+                    handleLoginSuccess("登录成功");
+                } else if (isLoginFailure(msg)) {
+                    handleLoginFailure(message);
+                }
+                break;
         }
 
-        // 检查登录失败的关键词
-        else if (response.contains("Error") ||
-                response.contains("Invalid") ||
-                response.contains("Access denied") ||
-                response.contains("Login incorrect") ||
-                response.toLowerCase().contains("fail")) {
-
-            // 登录失败
-            loginHandler.removeCallbacksAndMessages(null);
-            isLoggingIn = false;
-
-            runOnUiThread(() -> {
-                Toast.makeText(this, "Login failed", Toast.LENGTH_SHORT).show();
-                appendLog("[APP] ✗ Login failed: " + response, false, false, false);
-            });
+        // 额外检查：在任何状态都可能出现的提示符
+        if (hasCommandPrompt(msg) && loginState != LoginState.SUCCESS) {
+            handleLoginSuccess("检测到命令提示符");
         }
+        if (msg.contains("press enter")) {
+            sendStringCommand("\n",false);
+            loginState = LoginState.SENT_ENTER;
+        }
+    }
+    /**
+     * 发送用户名
+     */
+    private void sendUsername() {
+        loginState = LoginState.SENT_USERNAME;
+        loginHandler.post(() -> {
+            sendStringCommand(loginUsername, false);
+        });
+    }
+
+    /**
+     * 发送密码
+     */
+    private void sendPassword() {
+        loginState = LoginState.SENT_PASSWORD;
+        loginHandler.post(() -> {
+            sendStringCommand(loginPassword, false);
+        });
+    }
+
+    /**
+     * 处理登录成功
+     */
+    private void handleLoginSuccess(String reason) {
+        loginState = LoginState.SUCCESS;
+        isLoggingIn = false;
+        AlreadyLogged = true;
+
+        appendLog("[APP] 登录成功 (" + reason + ")", false, true, true);
+        loginHandler.post(() -> {
+            Toast.makeText(this, "登录成功", Toast.LENGTH_SHORT).show();
+            // 取消超时
+            loginHandler.removeCallbacksAndMessages(null);
+        });
+    }
+
+    /**
+     * 处理登录失败
+     */
+    private void handleLoginFailure(String errorMessage) {
+        loginState = LoginState.FAILED;
+        isLoggingIn = false;
+
+        appendLog("[APP] 登录失败: " + errorMessage, false, true, false);
+        loginHandler.post(() -> {
+            Toast.makeText(this, "登录失败: " + errorMessage, Toast.LENGTH_SHORT).show();
+            // 取消超时
+            loginHandler.removeCallbacksAndMessages(null);
+        });
+    }
+
+    /**
+     * 检查是否包含用户名提示
+     */
+    private boolean containsUsernamePrompt(String message) {
+        String[] prompts = {"login:", "username:", "user:", "user name:"};
+        for (String prompt : prompts) {
+            if (message.contains(prompt)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 检查是否包含密码提示
+     */
+    private boolean containsPasswordPrompt(String message) {
+        String[] prompts = {"password:", "passwd:"};
+        for (String prompt : prompts) {
+            if (message.contains(prompt)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 检查是否有命令提示符
+     */
+    private boolean hasCommandPrompt(String message) {
+        return message.endsWith("#") ||
+                message.endsWith(">") ||
+                message.endsWith("$") ||
+                message.endsWith("%") ||
+                message.contains("# ") ||
+                message.contains("> ");
+    }
+
+    /**
+     * 检查是否登录失败
+     */
+    private boolean isLoginFailure(String message) {
+        String[] failures = {"incorrect", "wrong", "fail", "error", "denied", "invalid"};
+        for (String failure : failures) {
+            if (message.contains(failure)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void setDeviceName(String deviceName) {
