@@ -394,8 +394,6 @@ public final class DeviceControlActivity extends BaseActivity {
                 appendLog("Sending ENTER to wake up device", false, true, false);
                 sendStringCommand("\n", false);  // 发送回车
             }
-
-
             // 第二步：延迟发送用户名
             loginHandler.postDelayed(() -> {
                 if (!isLoggingIn) return;
@@ -413,7 +411,6 @@ public final class DeviceControlActivity extends BaseActivity {
                     // 第四步：发送回车确认登录
                     loginHandler.postDelayed(() -> {
                         if (!isLoggingIn) return;
-
                         appendLog("Sending ENTER to confirm login", false, true, false);
                         sendStringCommand("\n", false);
 

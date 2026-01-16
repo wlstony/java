@@ -107,7 +107,8 @@ public class DeviceConnector {
             mConnectedThread.cancel();
             mConnectedThread = null;
         }
-
+        DeviceControlActivity.AlreadyWakedUp = false;
+        DeviceControlActivity.AlreadyLogged = false;
         setState(STATE_NONE);
     }
     // ==========================================================================
@@ -323,7 +324,7 @@ public class DeviceConnector {
                                     String cleanMessage = filterControlChars(completeLine);
                                     // 去掉回显
                                     cleanMessage = filterAllEcho(cleanMessage,lastCommand);
-
+                                    cleanMessage = cleanMessage.trim();
                                     // 如果是自动登录的，去掉其它字符
                                     if (lastCommand == null) {
                                         cleanMessage = extractConnectStatus(cleanMessage);
@@ -355,15 +356,20 @@ public class DeviceConnector {
          * 只提取 CONNECTING 和 CONNECTED 状态信息
          */
         private String extractConnectStatus(String line) {
+            Utils.log("line:"+line);
             // 检查是否包含连接状态关键字
             if (line.contains("CONNECTING") || line.contains("CONNECTED")) {
                 // 可以进一步清理，只保留状态信息
                 return line;
             }
             if (line.equals("#") || line.equals("# CONNECTED")) {
+                Utils.log("set logged true");
                 DeviceControlActivity.AlreadyLogged = true;
             }
-
+            if (line.contains("Username:")) {
+                Utils.log("set wakeup true");
+                DeviceControlActivity.AlreadyWakedUp = true;
+            }
             // 如果不是连接状态信息，返回空字符串
             return "";
         }
@@ -409,6 +415,7 @@ public class DeviceConnector {
                     }
                 }
             }
+
             // 专门过滤 # sh show show xxx 模式
             if (message.trim().matches("^#\\s*sh\\s+show\\s+show\\s+.*")) {
                 // 提取命令部分
@@ -416,7 +423,7 @@ public class DeviceConnector {
 
                 // 如果是最近发送的命令，过滤掉
                 {
-                     cmdBody = lastCommand.replaceFirst("^(sh|show)\\s+", "");
+                    cmdBody = lastCommand.replaceFirst("^(sh|show)\\s+", "");
                     if (cmdPart.equalsIgnoreCase(cmdBody)) {
                         Utils.log("过滤 # sh show show 回显: " + message);
                         return "";
@@ -424,7 +431,47 @@ public class DeviceConnector {
                 }
             }
 
+            // 3. 专门过滤 show show inter show inter * only 这种复杂回显
+            if (msgLower.contains("show show") && lastCommand.toLowerCase().contains("show")) {
+                // 提取消息中最后一个 "show" 之后的部分
+                int lastShowIndex = msgLower.lastIndexOf("show");
+                if (lastShowIndex != -1) {
+                    String afterLastShow = msgLower.substring(lastShowIndex + 4).trim(); // +4 是 "show" 的长度
+
+                    // 提取命令中 "show" 之后的部分
+                    int cmdShowIndex = cmdLower.indexOf("show");
+                    String cmdAfterShow = "";
+                    if (cmdShowIndex != -1) {
+                        cmdAfterShow = cmdLower.substring(cmdShowIndex + 4).trim();
+                    }
+
+                    // 如果消息的最后部分与命令的 show 之后的部分相同，过滤掉
+                    if (!cmdAfterShow.isEmpty() && afterLastShow.contains(cmdAfterShow)) {
+                        Utils.log("过滤复杂 show 回显: " + message);
+                        return "";
+                    }
+                }
+
+                // 更简单的检查：如果消息中出现两次以上的 "show"，且包含命令内容
+                int showCount = countOccurrences(msgLower, "show");
+                if (showCount >= 2 && msgLower.contains(cmdBody)) {
+                    Utils.log("过滤多次 show 回显: " + message);
+                    return "";
+                }
+            }
+
             return message;
+        }
+
+        // 辅助方法：计算字符串出现次数
+        private int countOccurrences(String str, String sub) {
+            int count = 0;
+            int idx = 0;
+            while ((idx = str.indexOf(sub, idx)) != -1) {
+                count++;
+                idx += sub.length();
+            }
+            return count;
         }
 
         private String extractCommandBody(String fullCommand) {
