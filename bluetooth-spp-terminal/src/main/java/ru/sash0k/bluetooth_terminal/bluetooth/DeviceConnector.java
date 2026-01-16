@@ -357,6 +357,11 @@ public class DeviceConnector {
          */
         private String extractConnectStatus(String line) {
             Utils.log("line:"+line);
+            if (line.equals("Username: CONNECTED")) {
+                Utils.log("set wakeup true 1");
+                DeviceControlActivity.AlreadyWakedUp = true;
+                return "Username: ";
+            }
             // 检查是否包含连接状态关键字
             if (line.contains("CONNECTING") || line.contains("CONNECTED")) {
                 // 可以进一步清理，只保留状态信息
@@ -367,7 +372,7 @@ public class DeviceConnector {
                 DeviceControlActivity.AlreadyLogged = true;
             }
             if (line.contains("Username:")) {
-                Utils.log("set wakeup true");
+                Utils.log("set wakeup true 2");
                 DeviceControlActivity.AlreadyWakedUp = true;
                 return line;
             }

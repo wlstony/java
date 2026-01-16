@@ -412,6 +412,7 @@ public final class DeviceControlActivity extends BaseActivity {
             case IDLE:
                 loginState = LoginState.SENT_ENTER;
                 Utils.log("步骤1: 发送回车唤醒设备");
+                sendEnter();
                 break;
 
             case SENT_USERNAME:
@@ -665,7 +666,7 @@ public final class DeviceControlActivity extends BaseActivity {
      * 检查是否包含密码提示
      */
     private boolean containsPasswordPrompt(String message) {
-        String[] prompts = {"password:", "passwd:"};
+        String[] prompts = {"password:", "passwd:", "username: "};
         for (String prompt : prompts) {
             if (message.contains(prompt)) {
                 return true;
