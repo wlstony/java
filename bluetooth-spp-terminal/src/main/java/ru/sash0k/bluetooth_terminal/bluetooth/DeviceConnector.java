@@ -30,6 +30,7 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import ru.sash0k.bluetooth_terminal.DeviceData;
 import ru.sash0k.bluetooth_terminal.Utils;
@@ -322,6 +323,13 @@ public class DeviceConnector {
                                 if (!completeLine.isEmpty()) {
                                     // 过滤控制字符和ANSI转义序列
                                     String cleanMessage = filterControlChars(completeLine);
+                                    // 去掉回显
+                                    cleanMessage = filterAllEcho(cleanMessage,lastCommand);
+
+                                    // 如果是自动登录的，去掉其它字符
+                                    if (lastCommand == null) {
+                                        cleanMessage = extractConnectStatus(cleanMessage);
+                                    }
                                     if (!cleanMessage.isEmpty()) {
                                         mHandler.obtainMessage(DeviceControlActivity.MESSAGE_READ,
                                                 -1, -1, cleanMessage).sendToTarget();
@@ -345,6 +353,83 @@ public class DeviceConnector {
             }
         }
 
+        /**
+         * 只提取 CONNECTING 和 CONNECTED 状态信息
+         */
+        private String extractConnectStatus(String line) {
+            // 检查是否包含连接状态关键字
+            if (line.contains("CONNECTING") || line.contains("CONNECTED")) {
+                // 可以进一步清理，只保留状态信息
+                return line;
+            }
+
+            // 如果不是连接状态信息，返回空字符串
+            return "";
+        }
+
+        private String filterAllEcho(String message, String lastCommand) {
+            if (message == null || message.isEmpty()) return "";
+            if (lastCommand == null || lastCommand.isEmpty()) return message;
+
+            // 常见的提示符模式
+            String[] prompts = {"#", ">", "$", ">", ":", "\\[.*\\]"};
+
+            String msgLower = message.toLowerCase().trim();
+            String cmdLower = lastCommand.toLowerCase().trim();
+
+            // 1. 检查是否是直接的命令回显（带或不带提示符）
+            for (String prompt : prompts) {
+                String echoPattern1 = "^" + prompt + "\\s*" + Pattern.quote(cmdLower) + "$";
+                String echoPattern2 = "^" + prompt + "\\s*" + cmdLower + "$";
+
+                if (msgLower.matches(echoPattern1) || msgLower.matches(echoPattern2)) {
+                    Utils.log("过滤带提示符回显: " + message);
+                    return "";
+                }
+            }
+
+            // 2. 处理带错误前缀的回显（如 sho show ver）
+            // 构建各种可能的错误回显模式
+            String[] errorPrefixes = {
+                    "sho", "sh", "show", "showw", "she", "s"
+            };
+
+            String cmdBody = extractCommandBody(cmdLower);
+
+            for (String prompt : prompts) {
+                for (String prefix1 : errorPrefixes) {
+                    for (String prefix2 : errorPrefixes) {
+                        // 模式如: # sho show ver
+                        String pattern = "^" + prompt + "\\s*" + prefix1 + "\\s+" + prefix2 + "\\s+" + cmdBody + "$";
+                        if (msgLower.matches(pattern)) {
+                            Utils.log("过滤错误前缀回显: " + message);
+                            return "";
+                        }
+                    }
+                }
+            }
+            // 专门过滤 # sh show show xxx 模式
+            if (message.trim().matches("^#\\s*sh\\s+show\\s+show\\s+.*")) {
+                // 提取命令部分
+                String cmdPart = message.replaceFirst("^#\\s*sh\\s+show\\s+show\\s+", "");
+
+                // 如果是最近发送的命令，过滤掉
+                {
+                     cmdBody = lastCommand.replaceFirst("^(sh|show)\\s+", "");
+                    if (cmdPart.equalsIgnoreCase(cmdBody)) {
+                        Utils.log("过滤 # sh show show 回显: " + message);
+                        return "";
+                    }
+                }
+            }
+
+            return message;
+        }
+
+        private String extractCommandBody(String fullCommand) {
+            // 移除命令中的 "show " 或 "sh " 前缀
+            return fullCommand.replaceFirst("^(sh|show|sho|she|showw)\\s+", "");
+        }
         private String filterControlChars(String input) {
             if (input == null || input.isEmpty()) return "";
 
@@ -362,7 +447,6 @@ public class DeviceConnector {
 
             return filtered;
         }
-
 
         /**
          * 记录最后发送的命令
@@ -385,9 +469,6 @@ public class DeviceConnector {
                 if (D) Log.e(TAG, "Exception during write", e);
             }
         }
-        // ==========================================================================
-
-
 
         public void write(byte command) {
             byte[] buffer = new byte[1];

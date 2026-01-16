@@ -365,8 +365,8 @@ public final class DeviceControlActivity extends BaseActivity {
             showAlertDialog("user and passwd can not be empty", false);
             return;
         }
-        if (!isConnected()) {
-            showAlertDialog("Not connected to device", false);
+        if (isConnected()) {
+            showAlertDialog("connection is already established", false);
             return;
         }
 //        sendStringCommand(username, false);
