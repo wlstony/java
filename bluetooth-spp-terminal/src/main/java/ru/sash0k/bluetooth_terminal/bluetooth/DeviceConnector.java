@@ -369,6 +369,7 @@ public class DeviceConnector {
             if (line.contains("Username:")) {
                 Utils.log("set wakeup true");
                 DeviceControlActivity.AlreadyWakedUp = true;
+                return line;
             }
             // 如果不是连接状态信息，返回空字符串
             return "";

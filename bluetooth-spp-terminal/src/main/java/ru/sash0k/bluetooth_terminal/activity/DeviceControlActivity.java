@@ -356,8 +356,8 @@ public final class DeviceControlActivity extends BaseActivity {
     // 是否需要唤醒
     public static boolean AlreadyWakedUp = false;
     public void sendLogin(View view) throws InterruptedException {
-        String username = ((EditText)findViewById(R.id.username)).getText().toString();
-        String passwd = ((EditText)findViewById(R.id.password)).getText().toString();
+        String username = ((EditText)findViewById(R.id.username)).getText().toString().trim();
+        String passwd = ((EditText)findViewById(R.id.password)).getText().toString().trim();
         if (username.isEmpty() || passwd.isEmpty())  {
             showAlertDialog("user and passwd can not be empty", false);
             return;
@@ -387,7 +387,7 @@ public final class DeviceControlActivity extends BaseActivity {
             loginState = LoginState.SENT_ENTER;
         }
 
-        appendLog("[APP] 开始智能登录...", false, true, false);
+        appendLog("start login...", false, true, false);
         // 设置超时
         loginHandler.postDelayed(() -> {
             if (isLoggingIn && loginState != LoginState.SUCCESS) {
@@ -406,12 +406,12 @@ public final class DeviceControlActivity extends BaseActivity {
      * 发送登录步骤
      */
     private void sendLoginStep() {
+        Utils.log("current state:"+loginState.toString());
         if (!isLoggingIn) return;
         switch (loginState) {
             case IDLE:
                 loginState = LoginState.SENT_ENTER;
                 Utils.log("步骤1: 发送回车唤醒设备");
-                sendStringCommand("\n", false);
                 break;
 
             case SENT_USERNAME:
@@ -523,7 +523,7 @@ public final class DeviceControlActivity extends BaseActivity {
     private String loginUsername = "";
     private String loginPassword = "";
     private void processDeviceResponse(String message) {
-        Utils.log(message);
+        Utils.log("processDeviceResponse:"+message +",state:"+loginState.toString());
         if (!isLoggingIn) return;
         String msg = message.toLowerCase().trim();
 
@@ -587,8 +587,7 @@ public final class DeviceControlActivity extends BaseActivity {
             handleLoginSuccess("检测到命令提示符");
         }
         if (msg.contains("press enter")) {
-            sendStringCommand("\n",false);
-            loginState = LoginState.SENT_ENTER;
+           sendEnter();
         }
     }
     /**
@@ -596,19 +595,27 @@ public final class DeviceControlActivity extends BaseActivity {
      */
     private void sendUsername() {
         loginState = LoginState.SENT_USERNAME;
-        loginHandler.post(() -> {
+        loginHandler.postDelayed(() -> {
+            appendLog(loginUsername, false,true,false);
             sendStringCommand(loginUsername, false);
-        });
+        },500);
     }
 
+    private void sendEnter() {
+        loginState = LoginState.SENT_ENTER;
+        loginHandler.postDelayed(() -> {
+            sendStringCommand("\n", false);
+        },500);
+    }
     /**
      * 发送密码
      */
     private void sendPassword() {
         loginState = LoginState.SENT_PASSWORD;
-        loginHandler.post(() -> {
+        loginHandler.postDelayed(() -> {
+            appendLog(loginPassword, false,true,false);
             sendStringCommand(loginPassword, false);
-        });
+        }, 500);
     }
 
     /**
@@ -634,9 +641,8 @@ public final class DeviceControlActivity extends BaseActivity {
         loginState = LoginState.FAILED;
         isLoggingIn = false;
 
-        appendLog("[APP] 登录失败: " + errorMessage, false, true, false);
+        appendLog("login failed: " + errorMessage, false, true, false);
         loginHandler.post(() -> {
-            Toast.makeText(this, "登录失败: " + errorMessage, Toast.LENGTH_SHORT).show();
             // 取消超时
             loginHandler.removeCallbacksAndMessages(null);
         });
