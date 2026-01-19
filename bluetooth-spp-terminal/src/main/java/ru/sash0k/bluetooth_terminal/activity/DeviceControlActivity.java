@@ -393,8 +393,8 @@ public final class DeviceControlActivity extends BaseActivity {
             if (isLoggingIn && loginState != LoginState.SUCCESS) {
                 loginState = LoginState.TIMEOUT;
                 isLoggingIn = false;
-                appendLog("[APP] 登录超时", false, true, false);
-                Toast.makeText(this, "登录超时", Toast.LENGTH_SHORT).show();
+                appendLog("login overtime", false, true, false);
+                Toast.makeText(this, "login overtime", Toast.LENGTH_SHORT).show();
             }
         }, LOGIN_TIMEOUT);
 
@@ -537,7 +537,7 @@ public final class DeviceControlActivity extends BaseActivity {
                 }
                 // 检查是否已经有提示符（可能不需要登录）
                 else if (hasCommandPrompt(msg)) {
-                    handleLoginSuccess("已登录");
+                    handleLoginSuccess("already login");
                 }
                 break;
 
@@ -555,7 +555,7 @@ public final class DeviceControlActivity extends BaseActivity {
                 }
                 // 检查是否登录成功（某些设备发送用户名后直接登录）
                 else if (hasCommandPrompt(msg)) {
-                    handleLoginSuccess("用户名验证通过");
+                    handleLoginSuccess("username verified");
                 }
                 break;
 
@@ -568,7 +568,7 @@ public final class DeviceControlActivity extends BaseActivity {
             case SENT_PASSWORD:
                 // 检查登录结果
                 if (hasCommandPrompt(msg)) {
-                    handleLoginSuccess("密码验证通过");
+                    handleLoginSuccess("password verified");
                 } else if (isLoginFailure(msg)) {
                     handleLoginFailure(message);
                 }
@@ -576,7 +576,7 @@ public final class DeviceControlActivity extends BaseActivity {
 
             case WAITING_RESULT:
                 if (hasCommandPrompt(msg)) {
-                    handleLoginSuccess("登录成功");
+                    handleLoginSuccess("success");
                 } else if (isLoginFailure(msg)) {
                     handleLoginFailure(message);
                 }
@@ -585,7 +585,7 @@ public final class DeviceControlActivity extends BaseActivity {
 
         // 额外检查：在任何状态都可能出现的提示符
         if (hasCommandPrompt(msg) && loginState != LoginState.SUCCESS) {
-            handleLoginSuccess("检测到命令提示符");
+            handleLoginSuccess("command prompt symbol");
         }
         if (msg.contains("press enter")) {
            sendEnter();
@@ -627,9 +627,9 @@ public final class DeviceControlActivity extends BaseActivity {
         isLoggingIn = false;
         AlreadyLogged = true;
 
-        appendLog("[APP] 登录成功 (" + reason + ")", false, true, true);
+        appendLog("login result (" + reason + ")", false, true, true);
         loginHandler.post(() -> {
-            Toast.makeText(this, "登录成功", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "login success", Toast.LENGTH_SHORT).show();
             // 取消超时
             loginHandler.removeCallbacksAndMessages(null);
         });
