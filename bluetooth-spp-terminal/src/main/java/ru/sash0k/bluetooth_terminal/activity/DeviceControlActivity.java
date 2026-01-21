@@ -355,25 +355,25 @@ public final class DeviceControlActivity extends BaseActivity {
     public static boolean AlreadyLogged = false;
     // 是否需要唤醒
     public static boolean AlreadyWakedUp = false;
-    public void sendLogin(View view) throws InterruptedException {
-        String username = ((EditText)findViewById(R.id.username)).getText().toString().trim();
-        String passwd = ((EditText)findViewById(R.id.password)).getText().toString().trim();
-        if (username.isEmpty() || passwd.isEmpty())  {
-            showAlertDialog("user and passwd can not be empty", false);
-            return;
-        }
-        if (!isConnected()) {
-            showAlertDialog("connection is not established", false);
-            return;
-        }
-        if (AlreadyLogged) {
-            showAlertDialog("already logged", false);
-            return;
-        }
-
-        // 开始登录
-        startSmartLogin(username, passwd);
-    }
+//    public void sendLogin(View view) throws InterruptedException {
+//        String username = ((EditText)findViewById(R.id.username)).getText().toString().trim();
+//        String passwd = ((EditText)findViewById(R.id.password)).getText().toString().trim();
+//        if (username.isEmpty() || passwd.isEmpty())  {
+//            showAlertDialog("user and passwd can not be empty", false);
+//            return;
+//        }
+//        if (!isConnected()) {
+//            showAlertDialog("connection is not established", false);
+//            return;
+//        }
+//        if (AlreadyLogged) {
+//            showAlertDialog("already logged", false);
+//            return;
+//        }
+//
+//        // 开始登录
+//        startSmartLogin(username, passwd);
+//    }
     // ==================== 核心登录流程 ====================
     /**
      * 智能登录 - 根据设备响应交互
@@ -484,9 +484,9 @@ public final class DeviceControlActivity extends BaseActivity {
             crcOk = outgoing || crc.equals(Utils.calcModulo256(message).toUpperCase());
             if (hexMode) crc = Utils.printHex(crc.toUpperCase());
         }
-        if (!outgoing && isLoggingIn) {
-            processDeviceResponse(message);
-        }
+//        if (!outgoing && isLoggingIn) {
+////            processDeviceResponse(message);
+//        }
         msg.append("<b>")
                 .append(hexMode ? Utils.printHex(message) : message)
                 .append(checkSum ? Utils.mark(crc, crcOk ? CRC_OK : CRC_BAD) : "")
